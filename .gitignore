@@ -1,59 +1,36 @@
-# ==============================
-# Dataset files
-# ==============================
+# Local datasets
 data/
 
-# ==============================
-# Python cache and compiled files
-# ==============================
+# Python cache
 __pycache__/
 *.py[cod]
 *.pyo
 
-# ==============================
 # Virtual environments
-# ==============================
-venv/
 .venv/
+venv/
 env/
 
-# ==============================
 # Environment variables and secrets
-# ==============================
 .env
 .env.*
 !.env.example
 
-# ==============================
-# Jupyter Notebook checkpoints
-# ==============================
-.ipynb_checkpoints/
-
-# ==============================
-# IDE and editor files
-# ==============================
-.vscode/
-.idea/
-
-# ==============================
 # Test and coverage artifacts
-# ==============================
 .pytest_cache/
 .coverage
 htmlcov/
 
-# ==============================
-# Build and distribution files
-# ==============================
+# Build artifacts
 build/
 dist/
 *.egg-info/
 
-# ==============================
-# Logs and temporary files
-# ==============================
-*.log
-*.tmp
+# IDE and temporary files
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db
-data/
+*.log
+*.tmp
+.ipynb_checkpoints/
