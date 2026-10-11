@@ -1,8 +1,8 @@
 # MoodShift X implementation plan
 
-## Existing workspace state (updated 2026-10-11)
+## Project state (updated 2026-10-11)
 
-The workspace was empty at inspection: no application code, data, documentation, tests, or configuration files were present. There were no `AGENTS.md` instructions. No existing work was replaced.
+Phases 0 through 4 are implemented for the local prototype. Phase 4's audit, fixes, expanded tests, real-catalogue measurements, and operating guidance are recorded in `phase4_audit.md`, `phase4_test_report.md`, and `evaluation.md`. The local data directory is excluded from Git. No cloud deployment has been performed.
 
 ## Intended architecture
 
@@ -21,22 +21,23 @@ The recommendation core is callable without Streamlit and currently uses the Pyt
 2. Implement and test the deterministic recommendation engine independently (complete; mood-target scoring limited to the verified feature-bearing subset).
 3. Build the Streamlit interface and present structured engine explanations (complete; verified with Streamlit 1.65.0).
 4. Connect existing pure-Python feedback state to Streamlit session state (complete; verified using Streamlit AppTest).
-5. Run UI-level functional tests, fix defects, and document installation, architecture, limitations, and deployment (complete for the local prototype).
+5. Run UI-level functional tests, fix defects, benchmark actual catalogue behavior, and document installation, architecture, limitations, and deployment readiness (complete for the local prototype; public deployment remains blocked on data provisioning and license review).
 
 ## Dependencies and assumptions
 
-The product stack remains Python, Streamlit, pandas, NumPy, scikit-learn, pytest, and a local CSV. Phase 1 inspection/loader tooling currently uses only the Python standard library and runs with Python 3.14.5 in this workspace; choose product dependency pins when the application skeleton is implemented. Dataset files are acquired by the developer and are not silently committed.
+The product stack is Python 3.10+ and Streamlit 1.65.0, pinned in `requirements.txt`; `requirements-dev.txt` adds pytest 9.1.1. The catalogue loader and recommendation engine use the Python standard library. The local dataset is acquired separately and is not committed. The evaluation script uses `psutil` only when it is available to report process RSS; it is not an application dependency.
 
 FMA is selected. The local metadata has artist/genre information and the Echo Nest table supplies all six desired high-level features for 13,129 tracks joined by track ID; one lacks a display title, leaving 13,128 scoreable recommendations. The feature terms should be reviewed before redistribution/public deployment. The full 106,573-row cleaned display catalogue does not have mood features, so it cannot receive full-catalogue audio-goal scores.
 
 ## Current blockers
 
-No Phase 1 blocker remains for local catalogue inspection and loader work. The archive ZIP is not present, but the extracted CSVs are. The upstream Echo Nest/Spotify terms have not been independently confirmed for redistribution; review them before publishing derived feature data. Full-catalogue mood scoring remains unsupported by this dataset.
+The archive ZIP is not present, but extracted local CSVs are available. A clean checkout has no `data/fma_metadata/`, so a hosted app needs an authorized runtime data provisioning method before recommendations can work. Echo Nest/Spotify terms have not been independently confirmed for redistribution; review them before publishing or serving derived feature data. Full-catalogue audio-goal scoring remains unsupported by this dataset.
 
 ## Milestone acceptance criteria
 
 - Phase 0: workspace inventory and architecture are recorded without overwriting existing work. **Met.**
 - Phase 1: source, creator, terms, and exact acquisition steps are documented; actual schema is mapped; canonical fields and quality checks are implemented; statistics are reproducible; unavailable data remains explicitly pending. **Met for the supplied extracted files.** Measured results are in `dataset_inspection.md` and `dataset_inspection.json`; feature-based scoring coverage is 13,128 clean recommendations.
-- Phase 2: target, preference, discovery, and diversity scoring use verified inputs; feedback is bounded and idempotent; unsupported components remain explicit; explanations carry calculation evidence; ties are deterministic; the full automated suite passes; real-catalogue integration is recorded. **Met:** 27 tests passed; see `architecture.md` and `evaluation.md`.
-- Phase 3: **complete for the local prototype.** Streamlit 1.65.0 was installed from `requirements.txt`; the app launched at `http://localhost:8501` and returned HTTP 200 from Streamlit's health endpoint. Streamlit AppTest exercised a real-catalogue submission, engine results and evidence, like/skip/more-like feedback, more-variety reranking, and reset. Full suite: 30 tests passed. See `README.md` for local setup and known limitations.
+- Phase 2: target, preference, discovery, and diversity scoring use verified inputs; feedback is bounded and idempotent; unsupported components remain explicit; explanations carry calculation evidence; ties are deterministic; automated tests and real-catalogue integration are recorded. **Met:** see `phase4_test_report.md` and `evaluation.md` for current results.
+- Phase 3: **complete for the local prototype.** Streamlit 1.65.0 is pinned in `requirements.txt`; startup and health endpoint are checked in the Phase 4 test report. Streamlit AppTest exercises catalogue-backed submission, results and evidence, like/skip/more-like feedback, more-variety reranking, reset, safe metadata rendering, and a missing catalogue. See `README.md` for local setup and limitations.
+- Phase 4: **complete for local QA and readiness documentation.** The app caches catalogue option/candidate subsets, escapes source metadata, handles missing data without exposing absolute paths, and validates links. Engine ranking avoids generating full explanation payloads for discarded candidates; diversity similarity uses precomputed signatures. Full regression results, reproducible local benchmark, and outstanding deployment blockers are reported in `phase4_test_report.md`, `evaluation.md`, and `phase4_audit.md`.
 - Phase 2 onward: each subsystem is implemented and verified before being connected to the next layer; no fabricated catalogue records, feature values, listening links, or artwork are introduced.

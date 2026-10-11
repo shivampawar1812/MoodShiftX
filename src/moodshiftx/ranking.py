@@ -124,6 +124,29 @@ def _genre_rarity(track: Mapping[str, Any], counts: Mapping[str, int], max_count
     return {"score": min(1.0, max(0.0, score)), "genre_count": count}
 
 
+def _explanation_for_result(
+    row: Mapping[str, Any], profile: PreferenceProfile, feedback: FeedbackState,
+    lookup: Mapping[str, Mapping[str, Any]], genre_counts: Mapping[str, int], max_genre_count: int,
+) -> dict[str, Any]:
+    """Build evidence only for results the caller will return to a user."""
+    _, target_detail = target_match(row, profile)
+    _, feedback_evidence = _feedback_score(row, feedback, lookup)
+    genre_match = _genre_match(row, profile.preferred_genres) if profile.preferred_genres else False
+    rarity = _genre_rarity(row, genre_counts, max_genre_count)
+    components = {"target": row.get("target_score"), "preference": row.get("preference_score"),
+                  "discovery": row.get("discovery_score")}
+    detail = {
+        "target_features": target_detail["feature_comparisons"],
+        "genre_match": genre_match,
+        "preferred_genres": list(profile.preferred_genres),
+        "feedback_similarities": feedback_evidence,
+        "genre_rarity": rarity,
+        "unsupported_components": [name for name, value in components.items() if value is None],
+        "zero_weight_supported_components": list(row.get("zero_weight_supported_components", ())),
+    }
+    return explain_recommendation(row, components, row.get("component_weights", {}), detail)
+
+
 def _effective_weights(
     requested: Mapping[str, float], active: Sequence[str], extra_discovery: float = 0.0,
     fallback_equal: bool = False,
@@ -145,6 +168,7 @@ def rank_tracks(
     feedback: FeedbackState | None = None,
     *,
     limit: int | None = None,
+    include_explanations: bool = True,
 ) -> list[dict[str, Any]]:
     """Score, explain, and stably order catalogue tracks; no UI dependencies."""
     feedback = feedback or FeedbackState()
@@ -155,7 +179,7 @@ def rank_tracks(
         if not tid or tid in seen:
             continue
         seen.add(tid)
-        track = dict(raw)
+        track = raw
         if profile.genre_filter == "strict" and profile.preferred_genres and not _genre_match(track, profile.preferred_genres):
             continue
         tracks.append(track)
@@ -190,18 +214,21 @@ def rank_tracks(
                                      fallback_equal=not any(profile.weights.values()))
         total = sum(weights[name] * float(components[name]) for name in weights)
         total = min(1.0, max(0.0, total))
-        detail = {
-            "target_features": target_detail["feature_comparisons"],
-            "genre_match": genre_match,
-            "preferred_genres": list(profile.preferred_genres),
-            "feedback_similarities": feedback_evidence,
-            "genre_rarity": rarity,
-            "unsupported_components": [name for name in components if components[name] is None],
-            "zero_weight_supported_components": [name for name in active if name not in weights],
-        }
-        explanation = explain_recommendation(track, components, weights, detail)
+        unsupported_components = [name for name in components if components[name] is None]
+        zero_weight_components = [name for name in active if name not in weights]
+        if include_explanations:
+            detail = {
+                "target_features": target_detail["feature_comparisons"],
+                "genre_match": genre_match,
+                "preferred_genres": list(profile.preferred_genres),
+                "feedback_similarities": feedback_evidence,
+                "genre_rarity": rarity,
+                "unsupported_components": unsupported_components,
+                "zero_weight_supported_components": zero_weight_components,
+            }
+            explanation = explain_recommendation(track, components, weights, detail)
         contributions = {name: weights[name] * float(components[name]) for name in weights}
-        results.append({
+        result = {
             **track,
             "target_score": target_score,
             "preference_score": preference_score,
@@ -211,11 +238,13 @@ def rank_tracks(
             "component_weights": weights,
             "component_contributions": contributions,
             "contributing_components": list(weights),
-            "unsupported_components": detail["unsupported_components"],
-            "zero_weight_supported_components": detail["zero_weight_supported_components"],
+            "unsupported_components": unsupported_components,
+            "zero_weight_supported_components": zero_weight_components,
             "target_distance": target_detail.get("distance"),
-            "explanation": explanation,
-        })
+        }
+        if include_explanations:
+            result["explanation"] = explanation
+        results.append(result)
     results.sort(key=lambda row: (-row["overall_score"], str(row["track_id"])))
     return results[:(profile.recommendation_count if limit is None else max(0, limit))]
 
@@ -231,10 +260,22 @@ def recommend_tracks(
     from .diversity import rerank_for_diversity
 
     feedback = feedback or FeedbackState()
-    ranked = rank_tracks(catalogue, profile, feedback, limit=len(catalogue))
+    ranked = rank_tracks(catalogue, profile, feedback, limit=len(catalogue), include_explanations=False)
     variety = max(profile.variety, 0.8) if feedback.more_variety else profile.variety
-    return rerank_for_diversity(
+    selected = rerank_for_diversity(
         ranked, variety=variety, max_tracks_per_artist=max_tracks_per_artist,
         count=profile.recommendation_count,
     )
+    lookup = _build_feedback_lookup(catalogue, feedback)
+    genre_counts: dict[str, int] = {}
+    for track in catalogue:
+        genre = track.get("genre")
+        if isinstance(genre, str) and genre.strip():
+            key = genre.casefold()
+            genre_counts[key] = genre_counts.get(key, 0) + 1
+    max_genre_count = max(genre_counts.values(), default=0)
+    for row in selected:
+        row["explanation"] = _explanation_for_result(
+            row, profile, feedback, lookup, genre_counts, max_genre_count)
+    return selected
 

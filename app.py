@@ -1,9 +1,10 @@
 """MoodShift X local Streamlit application."""
 from __future__ import annotations
 
-from collections import Counter
 import logging
+import os
 from pathlib import Path
+import re
 from types import MappingProxyType
 from typing import Mapping
 from urllib.parse import urlparse
@@ -16,8 +17,8 @@ from src.moodshiftx.preferences import DEFAULT_GOAL_TARGETS, PreferenceProfile
 from src.moodshiftx.ranking import recommend_tracks
 
 ROOT = Path(__file__).resolve().parent
-DATA_DIR = ROOT / "data" / "fma_metadata"
 LOGGER = logging.getLogger(__name__)
+MARKDOWN_SPECIAL = re.compile(r"([\\`*_{}\[\]()#+\-.!|<>])")
 FEATURE_LABELS = {
     "energy": "Energy", "valence": "Valence", "danceability": "Danceability",
     "acousticness": "Acousticness", "tempo": "Tempo", "instrumentalness": "Instrumentalness",
@@ -30,11 +31,45 @@ WEIGHT_HELP = {
 
 
 @st.cache_resource(show_spinner="Loading local music catalogue…")
-def get_catalogue(data_dir: str = str(DATA_DIR)) -> tuple[Mapping, ...]:
+def get_catalogue(data_dir: str | None = None) -> tuple[Mapping, ...]:
     """Share an immutable canonical catalogue across sessions."""
-    records = load_catalogue(data_dir)
+    records = load_catalogue(data_dir or str(_data_dir()))
     return tuple(MappingProxyType({**row, "source_genre_ids": tuple(row.get("source_genre_ids") or ())})
                  for row in records)
+
+
+@st.cache_resource(show_spinner=False)
+def get_catalogue_options(data_dir: str | None = None) -> tuple[tuple[str, ...], frozenset[str]]:
+    """Cache immutable genre and supported-feature choices across reruns."""
+    catalogue = get_catalogue(data_dir or str(_data_dir()))
+    genres = tuple(sorted({str(row["genre"]) for row in catalogue if row.get("genre")}))
+    features = frozenset(name for row in catalogue for name in FEATURE_LABELS
+                         if row.get(name) is not None)
+    return genres, features
+
+
+@st.cache_resource(show_spinner=False)
+def get_goal_candidates(features: tuple[str, ...], data_dir: str | None = None) -> tuple[Mapping, ...]:
+    """Reuse feature-complete candidate pools for repeated feedback reranks."""
+    catalogue = get_catalogue(data_dir or str(_data_dir()))
+    return tuple(row for row in catalogue if all(row.get(name) is not None for name in features))
+
+
+def _plain_markdown(value: object) -> str:
+    """Escape source-derived values before placing them in Streamlit Markdown."""
+    text = str(value).replace("\r", " ").replace("\n", " ")
+    return MARKDOWN_SPECIAL.sub(r"\\\1", text)
+
+
+def _data_dir() -> Path:
+    return Path(os.environ.get("MOODSHIFTX_DATA_DIR", str(ROOT / "data" / "fma_metadata"))).expanduser().resolve()
+
+
+def _catalogue_location_label() -> str:
+    try:
+        return _data_dir().relative_to(ROOT).as_posix()
+    except ValueError:
+        return "the configured MOODSHIFTX_DATA_DIR location"
 
 
 def build_profile(values: dict, available_features: set[str] | None = None) -> PreferenceProfile:
@@ -62,13 +97,11 @@ def _rerun_recommendations() -> None:
     if profile is None:
         return
     try:
-        catalogue = get_catalogue()
         if profile.target_features:
             # Goal matching is scoped to tracks with every requested measurement.
-            candidates = [row for row in catalogue
-                          if all(row.get(key) is not None for key in profile.target_features)]
+            candidates = get_goal_candidates(tuple(sorted(profile.target_features)), str(_data_dir()))
         else:
-            candidates = catalogue
+            candidates = get_catalogue(str(_data_dir()))
         results = recommend_tracks(candidates, profile, st.session_state.get("feedback", FeedbackState()))
         no_scoreable = bool(results) and not any(row.get("contributing_components") for row in results)
         if no_scoreable:
@@ -114,8 +147,18 @@ def _reset() -> None:
 def _valid_url(value: object) -> str | None:
     if not isinstance(value, str):
         return None
-    parsed = urlparse(value.strip())
-    return value.strip() if parsed.scheme in {"http", "https"} and parsed.netloc else None
+    candidate = value.strip()
+    if not candidate or "\\" in candidate or any(char.isspace() or ord(char) < 0x20 for char in candidate):
+        return None
+    try:
+        parsed = urlparse(candidate)
+        if (parsed.scheme not in {"http", "https"} or not parsed.hostname
+                or parsed.username is not None or parsed.password is not None):
+            return None
+        _ = parsed.port  # Validate malformed and out-of-range ports.
+    except ValueError:
+        return None
+    return candidate
 
 
 def _fmt_feature(name: str, value: float) -> str:
@@ -126,10 +169,10 @@ def _render_card(row: dict, rank: int) -> None:
     with st.container(border=True):
         left, main, score_col = st.columns([0.7, 5, 1.5], vertical_alignment="center")
         left.markdown(f"### {rank:02d}")
-        main.markdown(f"### {row.get('track_name') or 'Untitled'}")
-        main.markdown(f"**{row.get('artist_name') or 'Unknown artist'}** · {row.get('genre') or 'Genre unavailable'}")
+        main.markdown(f"### {_plain_markdown(row.get('track_name') or 'Untitled')}")
+        main.markdown(f"**{_plain_markdown(row.get('artist_name') or 'Unknown artist')}** · {_plain_markdown(row.get('genre') or 'Genre unavailable')}")
         score_col.metric("Relevance", f"{row['overall_score']:.3f}")
-        st.caption(f"Track ID {row['track_id']} · algorithmic relevance, not a probability")
+        st.caption(f"Track ID {_plain_markdown(row['track_id'])} · algorithmic relevance, not a probability")
 
         if row.get("image_url"):
             image_url = _valid_url(row["image_url"])
@@ -161,11 +204,11 @@ def _render_card(row: dict, rank: int) -> None:
         with st.expander("Why this track?"):
             explanation = row.get("explanation", {})
             if explanation.get("summary"):
-                st.write(explanation["summary"])
+                st.text(explanation["summary"])
             for evidence in explanation.get("evidence", []):
-                st.markdown(f"- {evidence['text']}")
+                st.markdown(f"- {_plain_markdown(evidence['text'])}")
             for limitation in explanation.get("limitations", []):
-                st.caption(limitation)
+                st.caption(_plain_markdown(limitation))
             if not explanation.get("evidence"):
                 st.caption("The engine returned no explanatory evidence for this result.")
 
@@ -184,20 +227,22 @@ def main() -> None:
     st.caption("Local FMA catalogue · Goal targets are configurable product defaults, not a measurement of your mood.")
 
     try:
-        catalogue = get_catalogue()
-    except CatalogueError as exc:
+        data_dir = str(_data_dir())
+        get_catalogue(data_dir)
+    except CatalogueError:
+        LOGGER.exception("Local FMA catalogue is missing or invalid")
         st.error("The local music catalogue could not be loaded.")
-        st.markdown(f"Add valid FMA metadata files under `{DATA_DIR.relative_to(ROOT).as_posix()}/` (tracks.csv and genres.csv are required), then restart the app.")
-        st.caption(str(exc))
+        st.markdown(f"Add valid FMA metadata files under `{_plain_markdown(_catalogue_location_label())}/` (tracks.csv and genres.csv are required), then restart the app.")
+        st.caption("For audio-goal scoring, provide the optional echonest.csv file as well.")
         return
-    except (OSError, ValueError) as exc:
-        st.error("The local catalogue is missing or invalid. Check the FMA files and restart the app.")
-        st.caption(str(exc))
+    except (OSError, ValueError):
+        LOGGER.exception("Local FMA catalogue could not be read")
+        st.error("The local music catalogue could not be loaded.")
+        st.markdown(f"Check the required FMA files under `{_plain_markdown(_catalogue_location_label())}/` and restart the app.")
+        st.caption("Check file readability and the documented CSV schema.")
         return
 
-    genres = sorted({str(row["genre"]) for row in catalogue if row.get("genre")})
-    feature_counts = Counter(name for row in catalogue for name in FEATURE_LABELS if row.get(name) is not None)
-    supported = {name for name, count in feature_counts.items() if count}
+    genres, supported = get_catalogue_options(data_dir)
     goal_names = list(DEFAULT_GOAL_TARGETS)
     if not genres:
         st.warning("This catalogue has no mapped genres. Genre selection is unavailable; clear any old selection and use the metadata baseline.")

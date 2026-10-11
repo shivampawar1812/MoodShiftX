@@ -61,6 +61,7 @@ class CatalogueTests(unittest.TestCase):
         two = inspect_catalogue(self.root)
         self.assertEqual(one, two)
         self.assertEqual(one["track_rows"], 4)
+        self.assertEqual(one["data_dir"], "external configured directory")
         self.assertEqual(one["duplicate_track_id_extra_rows"], 1)
         self.assertEqual(one["clean_records"], 2)
         self.assertEqual(one["feature_stats"]["energy"]["invalid"], 1)

@@ -1,43 +1,35 @@
-# Phase 2 evaluation and verification
+# Evaluation and verification
 
-## Commands
+## Reproduce the checks
 
-Run the full unit and local-data integration suite:
-
-```powershell
-python -m unittest discover -s tests -v
-```
-
-Run a real-catalogue descriptive ranking check:
+Install application and test dependencies, then run:
 
 ```powershell
+python -m pytest -q
 python scripts/evaluate_engine.py
 ```
 
-The second command loads the local catalogue, limits candidates to tracks with all features required by the chosen `calm` product-default target, ranks twice, and checks stable IDs. It prints the selected target values and top five actual track records. It does not claim recommendation quality.
+`evaluate_engine.py` loads the local FMA catalogue and reports load and recommendation time, process RSS when `psutil` is installed, selected-feature coverage, distinct artists and genres, feature spread, deterministic repeatability, and a raw-interest baseline. It compares the engine's calm-target results against the same eligible tracks ranked by the source `track.interest` field. Raw interest is count-like metadata and is not calibrated as relevance or quality.
 
-## Test results
+## Local FMA run (2026-10-11)
 
-Verified locally with Python 3.14.5:
+Environment: Python 3.14.5, Streamlit 1.65.0, local extracted FMA metadata. Results from `python scripts/evaluate_engine.py`:
 
-- `python -m unittest discover -s tests -v`: **27 tests passed**. The suite covers profile validation; goal defaults; target formula and tempo normalization; partial/missing feature behavior; all-zero and normalized weights; strict/soft genre filtering; feedback responsiveness, idempotency, and reset; catalogue genre discovery; stable ties and duplicate IDs; explanation evidence; diversity behavior, artist caps, small catalogues, and score preservation; plus a real FMA subset integration check.
-- The local FMA integration test measured **106,573** clean catalogue records and **13,128** records with all six high-level features. On this verified subset, target-only ranking returned three finite results with target score equal to overall score.
-- Phase 1 inspection measured 106,574 source tracks, 16,341 artist IDs, 163 genre records, no duplicate track IDs, 518 clean low-level feature columns, and 13,128 clean recommendations supported by all six audio features. These counts are detailed in `dataset_inspection.md` and `dataset_inspection.json`.
+- Catalogue load: 106,573 displayable tracks; all five default calm target measurements were present on 13,128 tracks (12.3183% of the catalogue). The other 93,445 displayable tracks lacked at least one selected target measurement and were excluded from this comparison.
+- Goal matching ranked the 13,128 eligible rows in 4.177 seconds, before UI rendering. Catalogue loading took 13.016 seconds. Process RSS was 199.7 MB after loading and 212.2 MB after recommendation generation. These are local measurements, not cloud capacity guarantees.
+- The 10 returned IDs matched on a second run, with no duplicate IDs. The results contained 10 distinct artists and 10 distinct genres. Mean target score was 0.831132.
+- In this controlled target-only profile, target scoring was enabled and supported for all 13,128 candidates. Preference scoring was disabled because no genre or feedback was selected. Discovery evidence was available for 104,340 catalogue records (97.9047%) but discovery scoring was also disabled in this profile.
+- The top 10 raw-interest baseline contained 9 distinct artists and 7 distinct genres, with mean calm-target score 0.434351. The baseline is descriptive and uses a different ordering objective; this is not evidence of user preference or recommendation quality.
+- The engine's per-feature population standard deviations were: energy 0.051763, valence 0.074345, danceability 0.046018, acousticness 0.064970, tempo 7.739387 BPM. Feature spread alone does not establish useful diversity.
 
-The descriptive run `python scripts/evaluate_engine.py` ranked 13,128 real records against the configurable `calm` defaults (energy 0.30, valence 0.48, danceability 0.35, acousticness 0.70, tempo 90 BPM), with target-only weight and diversity variety 0. It returned identical track IDs on both runs. Its first results were:
+The benchmark prints the exact target values, selected track IDs, and full machine-readable metrics. Results can shift if local data or the implementation changes. The ranking outputs are deterministic for a fixed catalogue, profile, and code version.
 
-| Track ID | Track | Artist | Target score |
-|---:|---|---|---:|
-| 31886 | Slits live @ Primavera Sound 2010 (full set) | The Slits | 0.868730 |
-| 45462 | In the Casbah | Silver Abuse | 0.866822 |
-| 38538 | Come on in My Kitchen | Nobody's Bizness | 0.852899 |
-| 34085 | Burn the World | Grand Mal | 0.850889 |
-| 32482 | Respect | CM aka Creative | 0.844002 |
+## Automated test coverage
 
-These are the deterministic top rows for that explicit target configuration, not user-tested recommendations or evidence of emotional effect.
+The test suite covers profile validation, target formula and feature weights, score contribution arithmetic, supported/missing values, genre filtering, feedback transitions, stable ordering, evidence generation, diversity, catalogue parsing and errors, real-catalogue integration, Streamlit submission and session interactions, missing-data UI, URL validation, and safe rendering of catalogue text. See `docs/phase4_test_report.md` for the exact run commands and outcomes.
 
-## Limits of this evaluation
+## Limits
 
-No listener judgments, target-transition labels, or held-out relevance data are available. The tests establish formula correctness, deterministic behavior, bounded outputs, honest unsupported handling, and evidence fidelity. They do not establish that a target profile changes a listener's emotion or that recommendations are preferred by listeners. Genre rarity is catalogue-relative. Current state and activity are collected but are not treated as measured emotional information.
+There are no listener judgments, target-transition labels, or held-out relevance data. These tests and the local benchmark establish implementation behavior, not emotional effect, listener preference, or recommendation quality. Goal targets are configurable product defaults, not a psychological model. Genre rarity is relative to this catalogue. The popularity comparison uses raw `track.interest`, not a normalized or calibrated popularity score.
 
-Only the Phase 2 unit/integration test suite and the scripted local-catalogue check are reported as tests. A public license review for Echo Nest feature redistribution remains necessary before publishing derived feature data.
+The repository excludes the local dataset. Echo Nest/Spotify feature redistribution terms have not been independently verified; resolve that question before exposing the feature-bearing catalogue through a public service. The app has not been deployed to Streamlit Community Cloud.

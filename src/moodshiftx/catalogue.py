@@ -101,6 +101,11 @@ def _id_list(raw: str) -> list[int]:
 def inspect_catalogue(data_dir: str | Path) -> dict[str, Any]:
     """Return streaming, reproducible quality statistics for FMA CSVs."""
     root = Path(data_dir)
+    project_root = Path(__file__).resolve().parents[2]
+    try:
+        report_data_dir = root.resolve().relative_to(project_root).as_posix()
+    except ValueError:
+        report_data_dir = "external configured directory"
     tracks, genres = root / "tracks.csv", root / "genres.csv"
     echo, low = root / "echonest.csv", root / "features.csv"
     if not tracks.is_file() or not genres.is_file():
@@ -207,7 +212,7 @@ def inspect_catalogue(data_dir: str | Path) -> dict[str, Any]:
                     item["min"] = value if item["min"] is None else min(item["min"], value)
                     item["max"] = value if item["max"] is None else max(item["max"], value)
     return {
-        "data_dir": str(root), "track_header_columns": track_columns,
+        "data_dir": report_data_dir, "track_header_columns": track_columns,
         "genre_header_columns": genre_columns, "echonest_header_columns": echo_columns,
         "features_header_columns": _columns(low, 4) if low.is_file() else [],
         "track_rows": track_count, "distinct_track_ids": len(ids), "distinct_artist_ids": len(artists),

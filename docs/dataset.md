@@ -14,7 +14,7 @@
 
 ## Local inspection result
 
-All four expected CSVs exist: `tracks.csv`, `genres.csv`, `features.csv`, and `echonest.csv`. The exact columns, source counts, missingness, and measured feature ranges are in the generated [inspection JSON](/D:/MAJOR%20PROJECTS/MoodShiftX/docs/dataset_inspection.json) and readable summary in `dataset_inspection.md`. Reproduce both with:
+All four expected CSVs exist locally: `tracks.csv`, `genres.csv`, `features.csv`, and `echonest.csv`. Phase 4 refreshed the generated [inspection JSON](dataset_inspection.json) against the current extracted files on 2026-10-11. The current `tracks.csv` is 261,249,887 bytes, `genres.csv` 4,086 bytes, `features.csv` 951,223,763 bytes, and `echonest.csv` 44,013,580 bytes. The data directory is excluded from Git and these files are not present in a clean repository checkout. Exact columns, source counts, missingness, and measured feature ranges are in the inspection JSON and readable [summary](dataset_inspection.md). Reproduce the JSON with:
 
 ```powershell
 python scripts/inspect_dataset.py --output docs/dataset_inspection.json

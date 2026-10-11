@@ -67,6 +67,22 @@ class RankingTests(unittest.TestCase):
         self.assertAlmostEqual(detail["distance"], .5)
         self.assertAlmostEqual(score, math.exp(-1.5))
 
+    def test_feature_weights_and_component_contributions_are_consistent(self):
+        track = {"track_id": "weighted", "energy": .5, "valence": 1.0, "genre": "Rock"}
+        equal = PreferenceProfile(target_features={"energy": .5, "valence": .5},
+                                  target_feature_weights={"energy": 1, "valence": 1},
+                                  weights={"target": 1})
+        energy_first = PreferenceProfile(target_features={"energy": .5, "valence": .5},
+                                         target_feature_weights={"energy": 10, "valence": 1},
+                                         weights={"target": 1})
+        equal_score, _ = target_match(track, equal)
+        weighted_score, _ = target_match(track, energy_first)
+        self.assertGreater(weighted_score, equal_score)
+
+        profile = PreferenceProfile(target_features={"energy": .5}, preferred_genres=("Rock",))
+        result = rank_tracks([track], profile)[0]
+        self.assertAlmostEqual(result["overall_score"], sum(result["component_contributions"].values()))
+
     def test_stable_ranking_and_strict_genre_filter(self):
         profile = PreferenceProfile(target_features={"energy": .7}, preferred_genres=("rock",),
                                     genre_filter="strict", weights={"target": .7, "preference": .3, "discovery": 0})
@@ -103,6 +119,8 @@ class RankingTests(unittest.TestCase):
         strict = PreferenceProfile(target_features={}, preferred_genres=("Ambient",), genre_filter="strict")
         self.assertEqual(len(rank_tracks(FIXTURE, soft)), 4)
         self.assertTrue(all(row["genre"] == "Ambient" for row in rank_tracks(FIXTURE, strict)))
+        no_match = PreferenceProfile(target_features={}, preferred_genres=("Classical",), genre_filter="strict")
+        self.assertEqual(recommend_tracks(FIXTURE, no_match), [])
 
     def test_genre_discovery_uses_catalogue_frequency(self):
         profile = PreferenceProfile(target_features={}, weights={"discovery": 1})

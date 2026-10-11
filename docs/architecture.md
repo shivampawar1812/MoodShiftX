@@ -8,9 +8,9 @@ The inspected FMA source provides six usable Echo Nest audio features for 13,128
 
 ## Phase 3 Streamlit data flow
 
-`app.py` resolves the project root from its own file and loads `data/fma_metadata/` through `catalogue.load_catalogue`. Streamlit's resource cache holds the parsed catalogue as an immutable tuple of read-only mapping records for the process. Each browser session stores its own validated `PreferenceProfile`, immutable `FeedbackState`, and result records in `st.session_state`.
+`app.py` resolves the project root from its own file and loads `data/fma_metadata/` through `catalogue.load_catalogue`; `MOODSHIFTX_DATA_DIR` can select a different local directory. Streamlit's resource cache holds the parsed catalogue as an immutable tuple of read-only mapping records for the process. A second cache holds the genre and supported-feature choices, and another reuses the immutable subset that has all selected target features. Each browser session stores its own validated `PreferenceProfile`, immutable `FeedbackState`, and result records in `st.session_state`.
 
-Submitting the form builds the profile through `PreferenceProfile` validation and calls `recommend_tracks`; the UI does not calculate scores. If targets are selected, candidates are scoped to records with every requested measurement, making target scoring coverage explicit and comparable. With no targets, the app uses the metadata catalogue and makes no audio-goal claim. Each result card renders only `component_weights` present in the engine output, preserves `overall_score` / `original_ranking_score`, and separately shows `final_reranking_score`. Explanations come directly from the engine's structured evidence and limitations.
+Submitting the form builds the profile through `PreferenceProfile` validation and calls `recommend_tracks`; the UI does not calculate scores. If targets are selected, candidates are scoped to records with every requested measurement, making target scoring coverage explicit and comparable. With no targets, the app uses the metadata catalogue and makes no audio-goal claim. Each result card renders only `component_weights` present in the engine output, preserves `overall_score` / `original_ranking_score`, and separately shows `final_reranking_score`. Explanations come directly from the engine's structured evidence and limitations. Catalogue-derived text is escaped before Markdown rendering, and invalid external URLs are omitted. Missing-catalogue errors show actionable setup guidance without exposing local absolute paths; details go to the local logger.
 
 Card actions update session-local feedback through the pure transitions in `feedback.py`, then rerun the same recommendation function. The global variety toggle uses `more_variety`; reset clears feedback, preferences, and results without touching the cached catalogue. External links and artwork render only if valid URLs exist in actual records. No remote persistence or network media fetch is added.
 
@@ -19,8 +19,8 @@ Card actions update session-local feedback through the pure transitions in `feed
 - `preferences.py`: profile validation, supported feature bounds, configurable goal-to-target defaults, and normalized target/preference/discovery weights.
 - `catalogue.py`: local CSV loading, stable-ID joins, first-row duplicate policy, missing-value preservation, and source fingerprint caching.
 - `feedback.py`: pure state transitions for like, skip, more-like-this, more-variety, and reset. Each track has at most one like/skip state; repeated events are idempotent.
-- `ranking.py`: feature target match, genre preference, bounded feedback similarity, genre-frequency discovery, component-aware weight renormalization, stable sorting, and `recommend_tracks` orchestration.
-- `diversity.py`: deterministic greedy reranking using feature, genre, and artist evidence, with optional artist cap and an explicit repeat penalty.
+- `ranking.py`: feature target match, genre preference, bounded feedback similarity, genre-frequency discovery, component-aware weight renormalization, stable sorting, and `recommend_tracks` orchestration. Bulk ranking defers explanation evidence construction until the selected results are known.
+- `diversity.py`: deterministic greedy reranking using precomputed normalized feature/genre/artist signatures, with optional artist cap and an explicit repeat penalty.
 - `explanations.py`: structured evidence derived from ranking calculations and actual track metadata.
 
 ## Target match

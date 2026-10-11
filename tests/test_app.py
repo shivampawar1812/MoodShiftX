@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import unittest
+import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 try:
     import streamlit  # noqa: F401
@@ -69,7 +72,26 @@ class StreamlitAppTests(unittest.TestCase):
     def test_only_valid_external_urls_are_accepted(self):
         self.assertIsNone(moodshift_app._valid_url(None))
         self.assertIsNone(moodshift_app._valid_url("javascript:alert(1)"))
+        self.assertIsNone(moodshift_app._valid_url("https://user:password@example.com/track"))
+        self.assertIsNone(moodshift_app._valid_url("https://example.com:bad/track"))
+        self.assertIsNone(moodshift_app._valid_url("https://example.com/track with spaces"))
         self.assertEqual(moodshift_app._valid_url("https://example.com/track"), "https://example.com/track")
+
+    def test_catalogue_text_is_escaped_before_markdown_rendering(self):
+        escaped = moodshift_app._plain_markdown("[track](https://example.invalid) <img>\nname")
+        self.assertEqual(escaped, r"\[track\]\(https://example\.invalid\) \<img\> name")
+
+    def test_missing_catalogue_error_is_actionable_without_leaking_path(self):
+        app_path = Path(__file__).resolve().parents[1] / "app.py"
+        with TemporaryDirectory() as missing_dir, patch.dict(os.environ, {"MOODSHIFTX_DATA_DIR": missing_dir}):
+            app_test = AppTest.from_file(str(app_path), default_timeout=30).run()
+        self.assertFalse(app_test.exception)
+        rendered = [element.value for element in app_test.error]
+        rendered += [element.value for element in app_test.markdown]
+        rendered += [element.value for element in app_test.caption]
+        self.assertTrue(any("could not be loaded" in value for value in rendered), repr(rendered))
+        self.assertTrue(any("tracks.csv and genres.csv are required" in value for value in rendered))
+        self.assertFalse(any(missing_dir in value for value in rendered))
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ The canonical loader caches parsed records in-process using source-file size and
 
 ## Files and schema
 
-The supplied `data/fma_metadata/` directory contains `tracks.csv` (260,414,445 bytes), `genres.csv` (3,922 bytes), `features.csv` (951,117,185 bytes), and `echonest.csv` (44,000,447 bytes). The extracted `checksums` and `README.txt` are also present. The archive ZIP itself was not supplied; extracted files were accessible.
+The supplied `data/fma_metadata/` directory currently contains `tracks.csv` (261,249,887 bytes), `genres.csv` (4,086 bytes), `features.csv` (951,223,763 bytes), and `echonest.csv` (44,013,580 bytes). The extracted `checksums` and `README.txt` are also present. These current file sizes differ slightly from the original Phase 1 inspection; the machine-readable report was regenerated from the current local files. The archive ZIP itself was not supplied; extracted files were accessible.
 
 | File | Actual structure | Key columns / data |
 |---|---|---|

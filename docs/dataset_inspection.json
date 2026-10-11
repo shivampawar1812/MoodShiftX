@@ -1,5 +1,5 @@
 {
-  "data_dir": "D:\\MAJOR PROJECTS\\MoodShiftX\\data\\fma_metadata",
+  "data_dir": "data/fma_metadata",
   "track_header_columns": [
     "track_id",
     "album.comments",
@@ -4551,9 +4551,9 @@
     }
   },
   "source_files_bytes": {
-    "tracks.csv": 260414445,
-    "genres.csv": 3922,
-    "features.csv": 951117185,
-    "echonest.csv": 44000447
+    "tracks.csv": 261249887,
+    "genres.csv": 4086,
+    "features.csv": 951223763,
+    "echonest.csv": 44013580
   }
 }

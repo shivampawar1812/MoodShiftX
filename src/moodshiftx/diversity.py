@@ -7,6 +7,7 @@ from typing import Any, Mapping, Sequence
 from .preferences import FEATURE_RANGES, SUPPORTED_FEATURES
 
 TEMPO_SCALE = 250.0
+FEATURE_ORDER = tuple(sorted(SUPPORTED_FEATURES))
 
 
 def _normalized(track: Mapping[str, Any], feature: str) -> float | None:
@@ -32,21 +33,40 @@ def feature_similarity(left: Mapping[str, Any], right: Mapping[str, Any]) -> flo
     return math.exp(-3.0 * math.sqrt(sum(deltas) / len(deltas))) if deltas else None
 
 
-def _pair_similarity(left: Mapping[str, Any], right: Mapping[str, Any]) -> float:
-    feature = feature_similarity(left, right)
+def _signature(track: Mapping[str, Any]) -> tuple[tuple[float | None, ...], str | None, str | None]:
+    features = tuple(_normalized(track, name) for name in FEATURE_ORDER)
+    genre = track.get("genre")
+    genre_key = str(genre).casefold() if genre else None
+    artist = track.get("artist_id") or track.get("artist_name")
+    artist_key = str(artist).casefold() if artist else None
+    return features, genre_key, artist_key
+
+
+def _signature_similarity(
+    left: tuple[tuple[float | None, ...], str | None, str | None],
+    right: tuple[tuple[float | None, ...], str | None, str | None],
+) -> float:
+    left_features, left_genre, left_artist = left
+    right_features, right_genre, right_artist = right
+    deltas = [(left_features[index] - right_features[index]) ** 2
+              for index in range(len(FEATURE_ORDER))
+              if left_features[index] is not None and right_features[index] is not None]
+    feature = math.exp(-3.0 * math.sqrt(sum(deltas) / len(deltas))) if deltas else None
     signals: list[float] = []
     if feature is not None:
         signals.append(feature)
-    left_genre, right_genre = left.get("genre"), right.get("genre")
     if left_genre and right_genre:
-        signals.append(1.0 if str(left_genre).casefold() == str(right_genre).casefold() else 0.0)
-    left_artist = left.get("artist_id") or left.get("artist_name")
-    right_artist = right.get("artist_id") or right.get("artist_name")
+        signals.append(1.0 if left_genre == right_genre else 0.0)
     if left_artist and right_artist:
-        signals.append(1.0 if str(left_artist).casefold() == str(right_artist).casefold() else 0.0)
+        signals.append(1.0 if left_artist == right_artist else 0.0)
     # Unknown metadata is neutral. It is not evidence that two tracks are
     # maximally different or novel.
     return sum(signals) / len(signals) if signals else 0.5
+
+
+def _pair_similarity(left: Mapping[str, Any], right: Mapping[str, Any]) -> float:
+    """Compatibility helper for direct pair checks."""
+    return _signature_similarity(_signature(left), _signature(right))
 
 
 def rerank_for_diversity(
@@ -89,6 +109,7 @@ def rerank_for_diversity(
         row["original_ranking_score"] = relevance
         unique[tid] = row
     remaining = list(unique.values())
+    signatures = {tid: _signature(row) for tid, row in unique.items()}
     selected: list[dict[str, Any]] = []
     artist_counts: dict[str, int] = {}
     while remaining and len(selected) < requested:
@@ -101,7 +122,9 @@ def rerank_for_diversity(
         evaluated = []
         for row in candidates:
             if selected:
-                novelty = 1.0 - max(_pair_similarity(row, chosen) for chosen in selected)
+                tid = str(row["track_id"])
+                novelty = 1.0 - max(_signature_similarity(signatures[tid], signatures[str(chosen["track_id"])])
+                                    for chosen in selected)
             else:
                 novelty = 1.0
             artist = str(row.get("artist_id") or row.get("artist_name") or "")
